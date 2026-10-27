@@ -9,6 +9,7 @@
 #define BYTE unsigned char
 #endif
 
+
 enum SCRIP_TYPE {
     SCP_NULL = 0,
     SCP_FIELD_INVERSE,  // modular inverse
@@ -27,6 +28,10 @@ void run_gl_test_mod_inv(TEST_STR_VEC& test_vec);
 void run_gl_test_mod_ops(TEST_STR_VEC& test_vec);
 void run_gl_test_ecc_add(TEST_STR_VEC& test_vec);
 void run_gl_test_ecc_scl(TEST_STR_VEC& test_vec);
+
+using namespace std;
+using namespace BigInt;
+using namespace GLLIB;
 
 glbigint mod_sub(glbigint& a, glbigint& b, glbigint& N);
 glbigint mod_add(glbigint& a, glbigint& b, glbigint& N);

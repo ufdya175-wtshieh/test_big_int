@@ -4,10 +4,10 @@
 #include <string>
 #include <vector>
 #include <array>
-#include "util.h"
 
 #include "bigint.h"
 #include "GlBigInt.h"
+#include "util.h"
 
 using namespace std;
 using namespace BigInt;

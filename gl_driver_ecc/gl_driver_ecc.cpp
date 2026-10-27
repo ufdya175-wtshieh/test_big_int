@@ -85,30 +85,30 @@ void test_ecc_ops() {
     bigint big_py = Py;
     bigint big_qx = Qx;
     bigint big_qy = Qy;
+    bigint big_rx, big_ry;
     bigint big_P = PRIME;
     
     bigint lam, t0, t1;
-    bigint big_zx, big_zy;
 
     // add, for P¡ÚQ
     // lam = (qy-py) / (qx-px)
     // zx = lam*lam - px - qx
     // zy = lam*(px - zx) - py
-    t0 = mod_sub(big_qy, big_py, big_P)
-    t1 = mod_sub(qx, px, big_P)
-    t1 = mod_inverse(t1, big_P)  // t0 / t1
-    lam = (t0 * t1) % big_P
+    t0 = mod_sub(big_qy, big_py, big_P);
+    t1 = mod_sub(big_qx, big_px, big_P);
+    t1 = mod_inv(t1, big_P);  // t0 / t1
+    lam = (t0 * t1) % big_P;
 
-    t0 = mod_mult(lam, lam, big_P)
-    t0 = mod_sub(t0, px, big_P)
-    Rx = mod_sub(t0, qx, big_P)
+    t0 = mod_mult(lam, lam, big_P);
+    t0 = mod_sub(t0, big_px, big_P);
+    big_rx = mod_sub(t0, big_qx, big_P);
 
-    t1 = mod_sub(px, Rx, big_P)
-    t1 = mod_mult(t1, lam, big_P)
-    Ry = mod_sub(t1, py, big_P)
+    t1 = mod_sub(big_px, big_rx, big_P);
+    t1 = mod_mult(t1, lam, big_P);
+    big_ry = mod_sub(t1, big_py, big_P);
 
-    cout << "Rx:" << big_zx << endl;
-    cout << "Ry:" << big_zy << endl;
+    cout << "Rx:" << big_rx << endl;
+    cout << "Ry:" << big_ry << endl;
 }
 glbigint Gl_BigInt_run_eclidean_mod(glbigint& a, glbigint& n) {
     glbigint sx = 1;
