@@ -27,7 +27,7 @@ bool parse_test_script(int script_type, const char* scriptFile, int query_start,
     int n_in = 0, n_out = 0, n_all = 0;
     int parse_value = 0;
     int i, vector_id = 0;
-    int tn = 0;
+    int ti = 0, tn = 0;
     const char* s, * p;
 
     //BYTE nums[6][32]{ 0 };
@@ -93,7 +93,7 @@ bool parse_test_script(int script_type, const char* scriptFile, int query_start,
         }
     };
 
-    tn = 0;
+    ti = tn = 0;
     parse_value = 0;
     test_vec.resize(query_cases);
     int ln = -1;
@@ -132,14 +132,20 @@ bool parse_test_script(int script_type, const char* scriptFile, int query_start,
                 //else {
                 //    convert_hex_rev(line, &nums[i][0]);
                 //}
-                //printf(" [%d][%d]: %s\n", tn, i, line.c_str());
-                test_vec[tn].push_back(string("0x") + line); // string is Hex format
+                if (tn >= query_start) {
+                    printf(" [%d][%d]: %s\n", tn, i, line.c_str());
+                    test_vec[ti].push_back(string("0x") + line); // string is Hex format
+                }
                 i++;
             }
             if (i == n_all) {
                 //printf(" test data {%02X %02X .. %02X}\n", nums[0][31], nums[0][30], nums[i-1][0]);
+                if (tn >= query_start)
+                    ti++;
+                
                 tn++;
-                if (tn >= query_cases) {
+                
+                if (tn >= (query_start + query_cases)) {
                     printf(" parse done, skip else\n");
                     break;
                 }
@@ -152,46 +158,60 @@ bool parse_test_script(int script_type, const char* scriptFile, int query_start,
     return true;
 }
 
-glbigint mod_sub(glbigint& a, glbigint& b, glbigint& N) {
+template<typename T>
+T mod_sub(T& a, T& b, T& N) {
     // all a,b < N
-    glbigint ret = a - b;
+    T ret = a - b;
     if (ret < 0)
         ret += N;
     return ret;
 }
-glbigint mod_add(glbigint& a, glbigint& b, glbigint& N) {
+
+template<typename T>
+T mod_add(T& a, T& b, T& N) {
     // all a,b < N
-    glbigint ret = a + b;
+    T ret = a + b;
     if (ret > N)
         ret -= N;
     return ret;
 }
-glbigint mod_mult(glbigint& a, glbigint& b, glbigint& N) {
+
+template<typename T>
+T mod_mult(T& a, T& b, T& N) {
     // must a>=0 and b>=0
-    glbigint ret = a * b;
+    T ret = a * b;
     ret %= N;
     return ret;
 }
-glbigint mod_divide(glbigint& a, glbigint& b, glbigint& N) {
+
+template<typename T>
+T mod_divide(T& a, T& b, T& N) {
     // a / b (mod N) = a * b^-1 (mod N)
-    glbigint inv = mod_inv(b, N);
-    glbigint ret = mod_mult(a, inv, N);
+    T inv = mod_inv(b, N);
+    T ret = mod_mult(a, inv, N);
     return ret;
 }
-glbigint mod_inv(glbigint& a, glbigint& N) {
-    glbigint sx = 1;
-    glbigint tx = 0;
-    glbigint rx, q, r;
-    glbigint A = a;
-    glbigint B = N;
-    array<glbigint, 2> ret;
+
+template<typename T>
+T mod_inv(T& a, T& N) {
+    T sx = 1;
+    T tx = 0;
+    T rx, q, r;
+    T A = a;
+    T B = N;
+    array<T, 2> ret;
 
     while (B > 0) {
-        q = A / B;
-        r = A - q * B;
-        //ret = glbigint::divide(A, B);
-        //q = ret[0];
-        //r = ret[1];
+        if constexpr (std::is_same<T, bigint>::value) {
+            q = A / B;
+            r = A - q * B;
+        }
+        else {
+            // glbigint, glhint
+            ret = T::divide(A, B);
+            q = ret[0];
+            r = ret[1];
+        }
 
         rx = sx - q * tx;
         sx = tx;
@@ -206,8 +226,38 @@ glbigint mod_inv(glbigint& a, glbigint& N) {
 
     return sx;
 }
+template<typename T>
+ECC_POINT<T> ecc_point_add(ECC_PARAM<T>& ecc, T& px, T& py, T& qx, T& qy) {
+    T lam, t0, t1;
+    T big_rx, big_ry;
+    T& big_P = *ecc.P;
 
+    // add, for P¡ÚQ
+    // £f = (qy-py) / (qx-px)
+    // zx = £f*£f - px - qx
+    // zy = £f*(px - zx) - py
+    t0 = mod_sub(qy, py, big_P);
+    t1 = mod_sub(qx, px, big_P);
+    t1 = mod_inv(t1, big_P);  // t0 / t1
+    lam = (t0 * t1) % (big_P);
 
+    t0 = mod_mult(lam, lam, big_P);
+    t0 = mod_sub(t0, px, big_P);
+    big_rx = mod_sub(t0, qx, big_P);
+
+    t1 = mod_sub(px, big_rx, big_P);
+    t1 = mod_mult(t1, lam, big_P);
+    big_ry = mod_sub(t1, py, big_P);
+
+    return { big_rx, big_ry };
+}
+
+// issue: fix unresolved external symbol, to instantiate template func in .obj
+template ECC_POINT<bigint> ecc_point_add(ECC_PARAM<bigint>& ecc, bigint& px, bigint& py, bigint& qx, bigint& qy);
+template ECC_POINT<glbigint> ecc_point_add(ECC_PARAM<glbigint>& ecc, glbigint& px, glbigint& py, glbigint& qx, glbigint& qy);
+template ECC_POINT<glhint> ecc_point_add(ECC_PARAM<glhint>& ecc, glhint& px, glhint& py, glhint& qx, glhint& qy);
+
+/*
 bigint mod_sub(bigint& a, bigint& b, bigint& N) {
     // all a,b < N
     bigint ret = a - b;
@@ -266,4 +316,52 @@ bigint mod_inv(bigint& a, bigint& N) {
         sx += N;
 
     return sx;
+}*/
+
+/*
+ECC_POINT<bigint> ecc_point_add(ECC_PARAM<bigint>& ecc, bigint& px, bigint& py, bigint &qx, bigint &qy) {
+    bigint lam, t0, t1;
+    bigint big_rx, big_ry;
+    bigint& big_P = *ecc.P;
+
+    // add, for P¡ÚQ
+    // £f = (qy-py) / (qx-px)
+    // zx = £f*£f - px - qx
+    // zy = £f*(px - zx) - py
+    t0 = mod_sub(qy, py, big_P);
+    t1 = mod_sub(qx, px, big_P);
+    t1 = mod_inv(t1, big_P);  // t0 / t1
+    lam = (t0 * t1) % (big_P);
+
+    t0 = mod_mult(lam, lam, big_P);
+    t0 = mod_sub(t0, px, big_P);
+    big_rx = mod_sub(t0, qx, big_P);
+
+    t1 = mod_sub(px, big_rx, big_P);
+    t1 = mod_mult(t1, lam, big_P);
+    big_ry = mod_sub(t1, py, big_P);
+
+    return { big_rx, big_ry };
+}*/
+
+string hex_to_dec_string(string&& n) {
+    bigint x(n);
+    string out(x);
+    return out;
+}
+
+string normalize_hex_string(string& n) {
+    // must prefix with '0x'
+    // remove leading 0's after '0x'
+    // ex. 0x00123 => 0x123
+    if (n.length() < 2 || (n[0] != '0' || n[1] != 'x'))
+        return "0x0";  // error
+    int zeros = 0;
+    while ((zeros + 2) < n.length() && n[zeros + 2] == '0')
+        zeros++;
+    return "0x" + n.substr(zeros + 2);
+}
+string normalize_hex_string(string&& n) {
+    string tmp = n;
+    return normalize_hex_string(tmp);
 }

@@ -35,44 +35,24 @@ TEST_STR_VEC g_vec_scl; // ECC point scalar multiply
 /*
 *  ROADMAP
 *   - Modular:
+*       - inverse
+*           - inverse with mod 'sx' term; Q: max -sx space requirement?
 *       - '+, -, 1/x, *'
 *   - ECC basic op:
 *       - point add
 *       - point mult
+*           - dev HEX-big-int for shift-add scalar algo
 *   - ECDSA:
 *       - verify sign (all MOD=N ops)
 *       - signing (=>need Point Add/Mult)
 */
 
-void debug_gl_int() {
-    string t = "618112719502521962";
-    string s = "-476388062129637389";
-    string q = "1";
-    string r = "13034429460984717302892898619004831460792164549273279953732";
-
-    glbigint x1, x2, gt, gs, gq, gr;
-    gt = t;
-    gs = s;
-    gq = q;
-    gr = r;
-    x1 = gq * gt;
-    x2 = gs - x1;
-    cout << "x1:" << x1 << endl;
-    cout << "x2:" << x2 << endl;
-
-    bigint b1, b2, bt, bs, bq, br;
-    bt = t;
-    bs = s;
-    bq = q;
-    br = r;
-    //b1 = bs - bq * bt;
-    b1 = bq * bt;
-    b2 = bs - b1;
-    cout << "b1:" << b1 << endl;
-    cout << "b2:" << b2 << endl;
-}
+template<typename T>  // only support glbigint, glhint
+T Gl_BigInt_run_eclidean_mod(T& a, T& n);
 
 void test_ecc_ops() {
+    int i;
+
     // test ECC point addition
     string Px = "0xb18d33dd457f646ac75ba62cd2d21cb5922aae58f5aafa09b78d5bc5816194ee";
     string Py = "0xe94df3e38e041e91220463803ca8821824e0a8f882ea7c1a5ec97571c0a0cc7b";
@@ -85,45 +65,88 @@ void test_ecc_ops() {
     bigint big_py = Py;
     bigint big_qx = Qx;
     bigint big_qy = Qy;
-    bigint big_rx, big_ry;
     bigint big_P = PRIME;
-    
-    bigint lam, t0, t1;
+    bigint big_A = A;
+    bigint big_N = ORDER;
+    ECC_POINT<bigint> big_pt;
+    ECC_PARAM<bigint> ecc{ &big_P, &big_A, NULL, &big_N };
 
-    // add, for P¡ÚQ
-    // lam = (qy-py) / (qx-px)
-    // zx = lam*lam - px - qx
-    // zy = lam*(px - zx) - py
-    t0 = mod_sub(big_qy, big_py, big_P);
-    t1 = mod_sub(big_qx, big_px, big_P);
-    t1 = mod_inv(t1, big_P);  // t0 / t1
-    lam = (t0 * t1) % big_P;
+    big_pt = ecc_point_add<bigint>(ecc, big_px, big_py, big_qx, big_qy);
+    std::cout << "Rx:" << big_pt.x << endl;
+    std::cout << "Ry:" << big_pt.y << endl;
 
-    t0 = mod_mult(lam, lam, big_P);
-    t0 = mod_sub(t0, big_px, big_P);
-    big_rx = mod_sub(t0, big_qx, big_P);
+    glbigint gl_px = Px;
+    glbigint gl_py = Py;
+    glbigint gl_qx = Qx;
+    glbigint gl_qy = Qy;
+    glbigint gl_P = PRIME;
+    glbigint gl_A = A;
+    glbigint gl_N = ORDER;
+    ECC_POINT<glbigint> gl_pt;
+    ECC_PARAM<glbigint> gl_ecc{ &gl_P, &gl_A, NULL, &gl_N };
 
-    t1 = mod_sub(big_px, big_rx, big_P);
-    t1 = mod_mult(t1, lam, big_P);
-    big_ry = mod_sub(t1, big_py, big_P);
-
-    cout << "Rx:" << big_rx << endl;
-    cout << "Ry:" << big_ry << endl;
+    gl_pt = ecc_point_add<glbigint>(gl_ecc, gl_px, gl_py, gl_qx, gl_qy);
+    std::cout << "Rx:" << gl_pt.x << endl;
+    std::cout << "Ry:" << gl_pt.y << endl;
 }
-glbigint Gl_BigInt_run_eclidean_mod(glbigint& a, glbigint& n) {
-    glbigint sx = 1;
-    glbigint tx = 0;
-    glbigint rx, q, r;
-    glbigint A = a;
-    glbigint B = n;
-    array<glbigint, 2> ret;
+void test_gl_hex_num() {
+    glhint h1 = "0x450DCF";
+    glhint h2 = "0x10005AF8";
+    glhint h3;
+    h3 = h1 + h2;
+    cout << "+:" << h3 << endl;
+
+    h1 = "98712366647555666";
+    h2 = "9997771112234512234";
+    h3 = h1 + h2;
+    cout << "+:" << h3 << endl;
+}
+template<typename T>  // only support glbigint, glhint
+T Gl_BigInt_run_eclidean_mod(T& a, T& n) {
+    T sx = 1;
+    T tx = 0;
+    T rx, q, r;
+    T A = a;
+    T B = n;
+    array<T, 2> ret;
+    int idx = 0;
+    string tmp;
+    const bool is_gl_hex_type = std::is_same<T, glhint>::value;
 
     while (B > 0) {
-        q = A / B;
-        r = A - q * B;
-        //ret = glbigint::divide(A, B);
-        //q = ret[0];
-        //r = ret[1];
+        //q = A / B;
+        //r = A - q * B;
+        ret = T::divide(A, B);
+        q = ret[0];
+        r = ret[1];
+        
+#if 0
+        if (false && is_gl_hex_type) {
+            // use glbigint to transform deci base & display?
+            // cout << "is hex!" << endl;
+            tmp = hex_to_dec_string(string(A));
+            cout << setw(4) << idx << " A:" << tmp << endl;
+            tmp = hex_to_dec_string(string(B));
+            cout << setw(4) << idx << " B:" << tmp << endl;
+
+            tmp = hex_to_dec_string(string(q));
+            cout << setw(4) << idx << " q:" << tmp << endl;
+            tmp = hex_to_dec_string(string(r));
+            cout << setw(4) << idx << " r:" << tmp << endl;
+            tmp = hex_to_dec_string(string(sx));
+            cout << setw(4) << idx << " s:" << tmp << endl;
+            tmp = hex_to_dec_string(string(tx));
+            cout << setw(4) << idx << " t:" << tmp << endl;
+        }
+        else {
+            cout << setw(4) << idx << " A:" << A << endl;
+            cout << setw(4) << idx << " B:" << B << endl;
+            cout << setw(4) << idx << " q:" << q << endl;
+            cout << setw(4) << idx << " r:" << r << endl;
+            cout << setw(4) << idx << " s:" << sx << endl;
+            cout << setw(4) << idx << " t:" << tx << endl;
+        }
+#endif
 
         rx = sx - q * tx;
         sx = tx;
@@ -131,10 +154,13 @@ glbigint Gl_BigInt_run_eclidean_mod(glbigint& a, glbigint& n) {
 
         A = B;
         B = r;
+        idx++;
     }
 
-    if (sx < 0)
+    if (sx < 0) {
+        //printf("negative!\n");
         sx += n;
+    }
 
     return sx;
 }
@@ -174,6 +200,7 @@ array<T, 2> BigInt_run_eclidean_mod(T& a, T& n) {
     return { sx, 0 };
 }
 template<typename T>
+
 void BigInt_test_euclidean() {
     vector<array<T, 2>> tests;
     /*int py_tests[][2] = {
@@ -228,12 +255,13 @@ void read_gl_test_script() {
         }
     };
 
-    //parse_test_script(SCP_FIELD_INVERSE, fname_inv, 0, 30, g_vec_inv);
+    // total = 10000 tests for each script
+    //parse_test_script(SCP_FIELD_INVERSE, fname_inv, 40, 10, g_vec_inv);
     //print_test_vec(g_vec_inv);
-    parse_test_script(SCP_FIELD_BASIC, fname_ops, 0, 5, g_vec_ops);
-    print_test_vec(g_vec_ops);
+    parse_test_script(SCP_FIELD_BASIC, fname_ops, 0, 10, g_vec_ops);
+    //print_test_vec(g_vec_ops);
     parse_test_script(SCP_ECC_ADD, fname_add, 0, 10, g_vec_add);
-    //parse_test_script(SCP_ECC_MUL, fname_mul, 0, 10, test_vec);
+    parse_test_script(SCP_ECC_MUL, fname_mul, 0, 10, g_vec_scl);
 }
 void run_gl_test_mod_inv(TEST_STR_VEC &test_vec) {
     // Y = X^(-1) mod N
@@ -246,19 +274,41 @@ void run_gl_test_mod_inv(TEST_STR_VEC &test_vec) {
     glbigint gl_N = ORDER;
     glbigint gl_x1, gl_x2;
 
+    glhint gl_hN = ORDER;
+    glhint gl_h1, gl_h2;
+
     bigint big_N = ORDER;
     bigint big_x1;
     array<bigint, 2> big_ret;
 
     for (i = 0; i < (int)test_vec.size(); i++){
         // [0]:X [1]:Y=X^-1
-        gl_x1 = test_vec[i][0];
-        gl_x2 = Gl_BigInt_run_eclidean_mod(gl_x1, gl_N);
-        cout << setw(4) << i << ",gl:" << gl_x2 << endl;
+        //gl_x1 = test_vec[i][0];
+        //gl_x2 = Gl_BigInt_run_eclidean_mod(gl_x1, gl_N);
+        //cout << setw(4) << i << ",gl:" << gl_x2 << endl;
 
-        big_x1 = test_vec[i][0];
-        big_ret = BigInt_run_eclidean_mod(big_x1, big_N);
-        cout << setw(4) << i << ",bi:" << big_ret[0] << endl;
+        gl_h1 = test_vec[i][0];
+        gl_h2 = Gl_BigInt_run_eclidean_mod(gl_h1, gl_hN);
+        //cout << setw(4) << i << ", gh:" << gl_h2 << endl;
+        //cout << setw(4) << i << ",ans:" << test_vec[i][1] << endl;
+        {   // ans may contain leading 0's, but always 64 chars
+            string gl = (string)gl_h2;
+            string& ans = test_vec[i][1];
+            gl.erase(0, 2);
+            ans.erase(0, 2);
+            size_t pos = ans.find_first_not_of('0', 0);
+            if (pos != string::npos)
+                ans.erase(0, pos);
+
+            bool ok = gl == ans;
+            cout << setw(4) << i << (ok ? " test ok" : " test fail") << endl;
+        }
+
+        //big_x1 = test_vec[i][0];
+        //big_ret = BigInt_run_eclidean_mod(big_x1, big_N);
+        //cout << setw(4) << i << ",bi:" << big_ret[0] << endl;
+
+        //cout << endl;
     }
 }
 void run_gl_test_mod_ops(TEST_STR_VEC& test_vec) {
@@ -273,54 +323,127 @@ void run_gl_test_mod_ops(TEST_STR_VEC& test_vec) {
 
     int i = 0;
     bool ok = false;
+    string s1, s2;
     glbigint gl_N = ORDER;
     glbigint gl_x1, gl_x2, gl_z1, gl_z2, gl_z3;
+
+    glhint gh_N = ORDER;
+    glhint gh_x1, gh_x2, gh_z1, gh_z2, gh_z3;
 
     bigint big_N = ORDER;
     bigint big_x1, big_x2, big_z1, big_z2, big_z3;
 
+    const bool test_add = true;
+    const bool test_sub = true;
+    const bool test_mul = true;
+
     for (i = 0; i < (int)test_vec.size(); i++) {
         ok = true;
-        gl_x1 = test_vec[i][0];
-        gl_x2 = test_vec[i][1];
-        gl_z1 = gl_x1 + gl_x2;
-        gl_z1 %= gl_N;
-        
-        big_x1 = test_vec[i][0];
-        big_x2 = test_vec[i][1];
-        big_z1 = big_x1 + big_x2;
-        big_z1 %= big_N;
-        if (string(big_z1) != string(gl_z1)) {
-            ok = false; 
-            cout << setw(4) << i << ",gl+:" << gl_z1 << endl;
-            cout << setw(4) << i << ",bi+:" << big_z1 << endl;
+        gh_x1 = test_vec[i][0];
+        gh_x2 = test_vec[i][1];
+
+        if (test_add) {
+            gh_z1 = gh_x1 + gh_x2;
+            gh_z1 %= gh_N;
+            s1 = normalize_hex_string(test_vec[i][2]);
+            s2 = string(gh_z1);
+            if (s1 != s2)
+            {
+                ok = false;
+                cout << setw(4) << i << ",gh+:" << s1 << endl;
+                cout << setw(4) << i << ",ans:" << s2 << endl;
+            }
+
+            //gl_x1 = test_vec[i][0];
+            //gl_x2 = test_vec[i][1];
+            //gl_z1 = gl_x1 + gl_x2;
+            //gl_z1 %= gl_N;
+            //
+            //big_x1 = test_vec[i][0];
+            //big_x2 = test_vec[i][1];
+            //big_z1 = big_x1 + big_x2;
+            //big_z1 %= big_N;
+            //if (string(big_z1) != string(gl_z1)) {
+            //    ok = false; 
+            //    cout << setw(4) << i << ",gl+:" << gl_z1 << endl;
+            //    cout << setw(4) << i << ",bi+:" << big_z1 << endl;
+            //}
         }
         
-        gl_z1 = gl_x1 - gl_x2;
-        if (gl_z1 < 0)
-            gl_z1 += gl_N;
-        big_z1 = big_x1 - big_x2;
-        if (big_z1 < 0)
-            big_z1 += big_N;
-        if (string(gl_z1) != string(big_z1)) {
-            ok = false;
-            cout << setw(4) << i << ",gl-:" << gl_z1 << endl;
-            cout << setw(4) << i << ",bi-:" << big_z1 << endl;
+        if (test_sub) {
+            gh_z1 = gh_x1 - gh_x2;
+            if (gh_z1 < 0)
+                gh_z1 += gh_N;
+            s1 = normalize_hex_string(test_vec[i][3]);
+            s2 = string(gh_z1);
+            if (s1 != s2)
+            {
+                ok = false;
+                cout << setw(4) << i << ",gh-:" << s1 << endl;
+                cout << setw(4) << i << ",ans:" << s2 << endl;
+            }
+
+            //gl_z1 = gl_x1 - gl_x2;
+            //if (gl_z1 < 0)
+            //    gl_z1 += gl_N;
+            //big_z1 = big_x1 - big_x2;
+            //if (big_z1 < 0)
+            //    big_z1 += big_N;
+            //if (string(gl_z1) != string(big_z1)) {
+            //    ok = false;
+            //    cout << setw(4) << i << ",gl-:" << gl_z1 << endl;
+            //    cout << setw(4) << i << ",bi-:" << big_z1 << endl;
+            //}
         }
 
-        gl_z1 = gl_x1 * gl_x2;
-        gl_z1 %= gl_N;
-        big_z1 = big_x1 * big_x2;
-        big_z1 %= big_N;
-        if (string(gl_z1) != string(big_z1)) {
-            ok = false;
-            cout << setw(4) << i << ",gl*:" << gl_z1 << endl;
-            cout << setw(4) << i << ",bi*:" << big_z1 << endl;
+        if (test_mul) {
+            gh_z1 = gh_x1 * gh_x2;
+            gh_z1 %= gh_N;
+            s1 = normalize_hex_string(test_vec[i][4]);
+            s2 = string(gh_z1);
+            if (s1 != s2)
+            {
+                ok = false;
+                cout << setw(4) << i << ",gh*:" << s1 << endl;
+                cout << setw(4) << i << ",ans:" << s2 << endl;
+            }
+            //gl_z1 = gl_x1 * gl_x2;
+            //gl_z1 %= gl_N;
+            //big_z1 = big_x1 * big_x2;
+            //big_z1 %= big_N;
+            //if (string(gl_z1) != string(big_z1)) {
+            //    ok = false;
+            //    cout << setw(4) << i << ",gl*:" << gl_z1 << endl;
+            //    cout << setw(4) << i << ",bi*:" << big_z1 << endl;
+            //}
         }
         
-        if (ok) {
-            cout << setw(4) << i << " test ok\n";
-        }
+        cout << setw(4) << i << (ok ? " test ok" : " test fail") << endl;
+    }
+}
+void run_gl_test_ecc_add(TEST_STR_VEC& test_vec) {
+    // test vector C(x, y) = A(x, y) + B(x, y)
+    // vec[i][6] = {Ax, Ay, Bx, By, Cx, Cy}
+    int i;
+
+    glhint h_ax, h_ay, h_bx, h_by, h_cx, h_cy;
+    glhint h_P = PRIME;
+    glhint h_A = A;
+    glhint h_N = ORDER;
+    ECC_POINT<glhint> h_pt;
+    ECC_PARAM<glhint> ecc_h{ &h_P, &h_A, NULL, &h_N };
+
+    for (i = 0; i < (int)test_vec.size(); i++) {
+        h_ax = test_vec[i][0];
+        h_ay = test_vec[i][1];
+        h_bx = test_vec[i][2];
+        h_by = test_vec[i][3];
+
+        h_pt = ecc_point_add<glhint>(ecc_h, h_ax, h_ay, h_bx, h_by);
+        cout << setw(4) << i << ",grx:" << h_pt.x << endl;
+        cout << setw(4) << i << ",gry:" << h_pt.y << endl;
+        cout << setw(4) << i << ",anx:" << test_vec[i][4] << endl;
+        cout << setw(4) << i << ",any:" << test_vec[i][5] << endl;
     }
 }
 void test_gl_bigint() {
@@ -373,10 +496,90 @@ void test_gl_bigint() {
     //x = "0xf3057bdf6e374d831dca2904e9388039c1f19c98273e8c5cb17150384acc679e";
     //tests.push_back({ x, N });
 }
+
+void debug_gl_int() {
+    string t = "618112719502521962";
+    string s = "-476388062129637389";
+    string q = "1";
+    string r = "13034429460984717302892898619004831460792164549273279953732";
+
+    glbigint x1, x2, gt, gs, gq, gr;
+    gt = t;
+    gs = s;
+    gq = q;
+    gr = r;
+    x1 = gq * gt;
+    x2 = gs - x1;
+    cout << "x1:" << x1 << endl;
+    cout << "x2:" << x2 << endl;
+
+    bigint b1, b2, bt, bs, bq, br;
+    bt = t;
+    bs = s;
+    bq = q;
+    br = r;
+    //b1 = bs - bq * bt;
+    b1 = bq * bt;
+    b2 = bs - b1;
+    cout << "b1:" << b1 << endl;
+    cout << "b2:" << b2 << endl;
+}
+void debug_gl_int2() {
+    // A/B=q,r error
+    string sA = "115792089210356248762697446949407573529996955224135760342422259061068512044369";
+    string sB = "3955100810131797683854636165629278411113263614927463269251570925909193695736";
+    // q = 29
+    // r = 1094165716534115930912998146158499607712310391239325534126702209701894868025
+    //  or,0x
+    glhint a = sA;
+    glhint b = sB;
+    glhint q, r;
+    array<glhint, 2> ret;
+    string tmp;
+
+    ret = glhint::divide(a, b);
+
+
+    cout << "q:" << ret[0] << endl;
+    cout << "r:" << ret[1] << endl;
+    tmp = hex_to_dec_string(string(ret[1]));
+    cout << "_:" << tmp << " (deci)\n:";
+
+    bigint b_a = sA;
+    bigint b_b = sB;
+    bigint b_q, b_r;
+
+    b_q = b_a / b_b;
+    b_r = b_a % b_b;
+    cout << "q:" << b_q << endl;
+    cout << "r:" << b_r << endl;
+
+    int kkk = 0;
+}
+void debug_gl_hint() {
+    // test vector 48 fail
+    // bug: in parsing '0x00..', need to remove leading 0's after '0x'
+    string data_in = "0x08be81fa83ea7b9038c86ca41d4860ec3f3d7993a77f49cc19d00424bebaa1f8";
+    string data_out = "0x0315cfa0f16b37041c74ba4d04c29c6f037f1d344e76584fc144828ea0913aba";
+
+    glbigint gl_N = ORDER;
+    glbigint gl_x1, gl_x2;
+
+    glhint gl_hN = ORDER;
+    glhint gl_h1, gl_h2;
+
+
+    gl_x1 = data_in;
+    gl_x2 = Gl_BigInt_run_eclidean_mod(gl_x1, gl_N);
+    cout << setw(4) << ",gl:" << gl_x2 << endl;
+
+    gl_h1 = data_in;
+    gl_h2 = Gl_BigInt_run_eclidean_mod(gl_h1, gl_hN);
+    cout << setw(4) << ",gh:" << gl_h2 << endl;
+}
+
 int main()
 {
-    std::cout << "Hello World!\n";
-
 #if 0
     bigint big1, big2, ans;
     big1 = "0x5750cc858ff413078f4b5da45e06f0a26e92b152f06879f82628b3e376021603";
@@ -409,18 +612,25 @@ int main()
 #endif
 
     read_gl_test_script();
+
     //run_gl_test_mod_inv(g_vec_inv);
     //run_gl_test_mod_ops(g_vec_ops);
+    run_gl_test_ecc_add(g_vec_add);
+ 
     //test_gl_bigint();
     test_ecc_ops();
+    //test_gl_hex_num();
 
     //printf("using bigint:\n");
     //BigInt_test_euclidean<bigint>();
 
     //printf("using GL Int:\n");
-    //BigInt_test_euclidean<glbigint>();
+    //BigInt_test_euclidean<glhint>();
 
+    // ********* debugging session ********
     //debug_gl_int();
+    //debug_gl_int2();
+    //debug_gl_hint();
 }
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu

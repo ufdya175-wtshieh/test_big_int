@@ -19,7 +19,26 @@ enum SCRIP_TYPE {
     //SCP_SHA256,
 };
 
+using namespace std;
+using namespace BigInt;
+using namespace GLLIB;
+
 using TEST_STR_VEC = std::vector<std::vector<std::string>>;
+
+template <typename T>
+struct ECC_PARAM {
+    T* P;
+    T* A;
+    T* B;
+    T* N;
+    // Gx, Gy...
+};
+
+template <typename T>
+struct ECC_POINT {
+    T x;
+    T y;
+};
 
 bool parse_test_script(int script_type, const char* scriptFile, int query_start, int query_cases,
     std::vector<std::vector<std::string>>& test_vec);
@@ -29,19 +48,33 @@ void run_gl_test_mod_ops(TEST_STR_VEC& test_vec);
 void run_gl_test_ecc_add(TEST_STR_VEC& test_vec);
 void run_gl_test_ecc_scl(TEST_STR_VEC& test_vec);
 
-using namespace std;
-using namespace BigInt;
-using namespace GLLIB;
 
-glbigint mod_sub(glbigint& a, glbigint& b, glbigint& N);
-glbigint mod_add(glbigint& a, glbigint& b, glbigint& N);
-glbigint mod_mult(glbigint& a, glbigint& b, glbigint& N);
-glbigint mod_divide(glbigint& a, glbigint& b, glbigint& N);
-glbigint mod_inv(glbigint& a, glbigint& N);
+template<typename T>
+T mod_sub(T& a, T& b, T& N);
+
+template<typename T>
+T mod_add(T& a, T& b, T& N);
+
+template<typename T>
+T mod_mult(T& a, T& b, T& N);
+
+template<typename T>
+T mod_divide(T& a, T& b, T& N);
+
+template<typename T>
+T mod_inv(T& a, T& N);
+
+template<typename T>
+ECC_POINT<T> ecc_point_add(ECC_PARAM<T>& ecc, T& px, T& py, T& qx, T& qy);
 
 // for verify
-bigint mod_sub(bigint& a, bigint& b, bigint& N);
-bigint mod_add(bigint& a, bigint& b, bigint& N);
-bigint mod_mult(bigint& a, bigint& b, bigint& N);
-bigint mod_divide(bigint& a, bigint& b, bigint& N);
-bigint mod_inv(bigint& a, bigint& N);
+//bigint mod_sub(bigint& a, bigint& b, bigint& N);
+//bigint mod_add(bigint& a, bigint& b, bigint& N);
+//bigint mod_mult(bigint& a, bigint& b, bigint& N);
+//bigint mod_divide(bigint& a, bigint& b, bigint& N);
+//bigint mod_inv(bigint& a, bigint& N);
+//ECC_POINT<bigint> ecc_point_add(ECC_PARAM<bigint>& ecc, bigint& px, bigint& py, bigint& qx, bigint& qy);
+
+string hex_to_dec_string(string &&n);
+string normalize_hex_string(string& n);
+string normalize_hex_string(string&& n);
