@@ -15,8 +15,21 @@ using namespace std;
 using namespace BigInt;
 using namespace GLLIB;
 
-
 #define ARRAY_SIZE(a)  (sizeof(a)/sizeof(a[0]))
+
+// static var init, to delete
+int glhint::s_count_add_sub = 0;
+int glhint::s_count_mul = 0;
+int glhint::s_count_div = 0;
+
+void count_reset() {
+    glhint::s_count_add_sub = 0;
+    glhint::s_count_mul = 0;
+    glhint::s_count_div = 0;
+}
+void count_print() {
+    printf("count +-:%6d  *:%4d /:%4d", glhint::s_count_add_sub, glhint::s_count_mul, glhint::s_count_div = 0);
+}
 
 // ECC params
 string PRIME = "0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff";
@@ -100,6 +113,94 @@ void test_gl_hex_num() {
     h2 = "9997771112234512234";
     h3 = h1 + h2;
     cout << "+:" << h3 << endl;
+
+    int i, j, total, context, bit;
+    string buf;
+    //h1 = "0xC632551";
+    h1 = ORDER;
+    cout << "hex:" << h1 << endl;
+    total = glhint::c_get_total_bits(h1);
+    printf("total = %d\n", total);
+    for (i = 0; i < total; i++) {
+        j = glhint::c_get_bit(h1, i);
+        //printf(" bit %d = %d\n", i, j);
+        buf += j ? '1' : '0';
+        if ((total - 1-i) % 8 == 0)
+            buf += ',';
+    }
+    std::reverse(buf.begin(), buf.end());
+    cout << buf << endl;
+    
+    context = 0;
+    i = 0;
+    buf = "";
+    glhint::c_next_bit(h1, &context, NULL);
+    while (glhint::c_next_bit(h1, &context, &bit)) {
+        buf += bit ? '1' : '0';
+        if (i % 8 == 7)
+            buf += ',';
+        i++;
+    }
+    //std::reverse(buf.begin(), buf.end());
+    cout << "enum bits\n";
+    cout << buf << endl;
+}
+
+void test_gl_ecc_point_scale() {
+    // ECC point scale, (px,py)*k=(ans_x, ans_y)
+    string ans_x = "0xf3623a5f792fe860a653953bee5fb486e90b716e02563e4b05ed2ff57510cb0b";
+    string ans_y = "0x003205d80bdb5a1ad64c73d4362ff01f1d9ca2106a968845aa55644ffc0096d4";
+    glhint h_k = "0x0326028248d4c583d3af206a4d2d4c1f81acef3e03633949eaf60c3d7ab7ea06";
+    ECC_POINT<glhint> h_pt, h_tmp;
+    h_pt.x = "0xaaef5d43f90c2c0c6579388f1bb26ca4b3dc830fa676ff1dfece64bbdf32d6ec";
+    h_pt.y = "0x085959ed6cd073511785fd6077472b245456ce5927160036d1e399bd2e8676b2";
+
+    glhint h_P = PRIME;
+    glhint h_A = A;
+    glhint h_N = ORDER;
+    ECC_PARAM<glhint> ecc{&h_P, &h_A, NULL, &h_N};
+    h_tmp = ecc_point_scale(ecc, h_pt.x, h_pt.y, h_k);
+    /*
+    int context{ 0 }, bit{ 0 }, idx{ 0 };
+
+    if (h_k == 0) {
+        printf("Identity case, abort\n");
+        return;
+    }
+    // enum from MSBit
+    
+    if (!glhint::c_next_bit(h_k, &context, NULL)) {
+        printf("init enum bit fail\n");
+        return;
+    }
+    
+    h_tmp = h_pt;
+    idx = 0;
+    glhint::c_next_bit(h_k, &context, &bit);
+    idx++;
+    // assert(bit == 1)
+
+    //count_reset();
+    // enum bit [1:_]
+    while (glhint::c_next_bit(h_k, &context, &bit)) {
+        idx++;
+        h_tmp = ecc_point_double(ecc, h_tmp.x, h_tmp.y);
+        if (bit) {
+            h_tmp = ecc_point_add(ecc, h_tmp.x, h_tmp.y, h_pt.x, h_pt.y);
+        }
+    }
+    //count_print();
+    */
+
+    string s1 = string(h_tmp.x);
+    string s2 = string(h_tmp.y);
+    cout << "zx:" << h_tmp.x << endl;
+    cout << "zy:" << h_tmp.y << endl;
+
+    if (normalize_hex_string(ans_x) == s1 && normalize_hex_string(ans_y) == s2)
+        cout << " test ok\n";
+    else
+        cout << " test fail\n";
 }
 template<typename T>  // only support glbigint, glhint
 T Gl_BigInt_run_eclidean_mod(T& a, T& n) {
@@ -256,12 +357,12 @@ void read_gl_test_script() {
     };
 
     // total = 10000 tests for each script
-    //parse_test_script(SCP_FIELD_INVERSE, fname_inv, 40, 10, g_vec_inv);
+    parse_test_script(SCP_FIELD_INVERSE, fname_inv, 0, 50, g_vec_inv);
     //print_test_vec(g_vec_inv);
     parse_test_script(SCP_FIELD_BASIC, fname_ops, 0, 10, g_vec_ops);
     //print_test_vec(g_vec_ops);
-    parse_test_script(SCP_ECC_ADD, fname_add, 0, 10, g_vec_add);
-    parse_test_script(SCP_ECC_MUL, fname_mul, 0, 10, g_vec_scl);
+    parse_test_script(SCP_ECC_ADD, fname_add, 0, 100, g_vec_add);
+    parse_test_script(SCP_ECC_MUL, fname_mul, 0, 10000, g_vec_scl);
 }
 void run_gl_test_mod_inv(TEST_STR_VEC &test_vec) {
     // Y = X^(-1) mod N
@@ -281,6 +382,8 @@ void run_gl_test_mod_inv(TEST_STR_VEC &test_vec) {
     bigint big_x1;
     array<bigint, 2> big_ret;
 
+    printf("Run test mod inv\n");
+
     for (i = 0; i < (int)test_vec.size(); i++){
         // [0]:X [1]:Y=X^-1
         //gl_x1 = test_vec[i][0];
@@ -288,7 +391,7 @@ void run_gl_test_mod_inv(TEST_STR_VEC &test_vec) {
         //cout << setw(4) << i << ",gl:" << gl_x2 << endl;
 
         gl_h1 = test_vec[i][0];
-        gl_h2 = Gl_BigInt_run_eclidean_mod(gl_h1, gl_hN);
+        gl_h2 = Gl_BigInt_run_eclidean_mod(gl_h1, gl_hN);        
         //cout << setw(4) << i << ", gh:" << gl_h2 << endl;
         //cout << setw(4) << i << ",ans:" << test_vec[i][1] << endl;
         {   // ans may contain leading 0's, but always 64 chars
@@ -336,6 +439,7 @@ void run_gl_test_mod_ops(TEST_STR_VEC& test_vec) {
     const bool test_add = true;
     const bool test_sub = true;
     const bool test_mul = true;
+    printf("Run test mod ops\n");
 
     for (i = 0; i < (int)test_vec.size(); i++) {
         ok = true;
@@ -424,7 +528,11 @@ void run_gl_test_mod_ops(TEST_STR_VEC& test_vec) {
 void run_gl_test_ecc_add(TEST_STR_VEC& test_vec) {
     // test vector C(x, y) = A(x, y) + B(x, y)
     // vec[i][6] = {Ax, Ay, Bx, By, Cx, Cy}
+    printf("Run test ecc point add\n");
+
     int i;
+    string s1, s2;
+    bool ok;
 
     glhint h_ax, h_ay, h_bx, h_by, h_cx, h_cy;
     glhint h_P = PRIME;
@@ -434,16 +542,59 @@ void run_gl_test_ecc_add(TEST_STR_VEC& test_vec) {
     ECC_PARAM<glhint> ecc_h{ &h_P, &h_A, NULL, &h_N };
 
     for (i = 0; i < (int)test_vec.size(); i++) {
+        ok = true;
         h_ax = test_vec[i][0];
         h_ay = test_vec[i][1];
         h_bx = test_vec[i][2];
         h_by = test_vec[i][3];
 
+        //count_reset();
         h_pt = ecc_point_add<glhint>(ecc_h, h_ax, h_ay, h_bx, h_by);
-        cout << setw(4) << i << ",grx:" << h_pt.x << endl;
-        cout << setw(4) << i << ",gry:" << h_pt.y << endl;
-        cout << setw(4) << i << ",anx:" << test_vec[i][4] << endl;
-        cout << setw(4) << i << ",any:" << test_vec[i][5] << endl;
+        //cout << setw(4) << i;
+        //count_print();
+
+        s1 = normalize_hex_string(test_vec[i][4]);
+        s2 = normalize_hex_string(test_vec[i][5]);
+        if (s1 != string(h_pt.x) || s2 != string(h_pt.y)) {
+            ok = false;
+        }
+        //cout << setw(4) << i << ",grx:" << h_pt.x << endl;
+        //cout << setw(4) << i << ",gry:" << h_pt.y << endl;
+        //cout << setw(4) << i << ",anx:" << test_vec[i][4] << endl;
+        //cout << setw(4) << i << ",any:" << test_vec[i][5] << endl;
+
+        cout << setw(4) << i << (ok ? " test ok" : " test fail") << endl;
+    }
+}
+void run_gl_test_ecc_scale(TEST_STR_VEC& test_vec) {
+    // test vector Q(x,y) = t * P(x,y)
+    int i;
+    bool ok;
+    string s1, s2;
+
+    glhint h_px, h_py, h_k;
+    glhint h_P = PRIME;
+    glhint h_A = A;
+    glhint h_N = ORDER;
+    ECC_POINT<glhint> h_pt;
+    ECC_PARAM<glhint> ecc_h{ &h_P, &h_A, NULL, &h_N };
+    
+    for (i = 0; i < (int)test_vec.size(); i++) {
+        ok = true;
+        h_px = test_vec[i][0];
+        h_py = test_vec[i][1];
+        h_k = test_vec[i][2];
+
+        h_pt = ecc_point_scale(ecc_h, h_px, h_py, h_k);
+        //cout << setw(4) << i << ",qx:" << h_pt.x << endl;
+        //cout << setw(4) << i << ",qy:" << h_pt.y << endl;
+
+        s1 = normalize_hex_string(test_vec[i][3]);
+        s2 = normalize_hex_string(test_vec[i][4]);
+        if (s1 != string(h_pt.x) || s2 != string(h_pt.y)) {
+            ok = false;
+        }
+        cout << setw(4) << i << (ok ? " test ok" : " test fail") << endl;
     }
 }
 void test_gl_bigint() {
@@ -493,8 +644,19 @@ void test_gl_bigint() {
     cout << " inv: " << x3 << endl;
     cout << " ->verify: " << x4 << endl;
 
-    //x = "0xf3057bdf6e374d831dca2904e9388039c1f19c98273e8c5cb17150384acc679e";
-    //tests.push_back({ x, N });
+    glhint h1 = n4;
+    glhint h2 = n2;
+    glhint h3;
+    
+    count_reset();
+    printf("run +-..\n");
+    h3 = h2 - h1;
+    count_print();
+
+    count_reset();
+    printf("run div..\n");
+    auto h_ret = glhint::divide(h2, h1);
+    count_print();
 }
 
 void debug_gl_int() {
@@ -615,11 +777,14 @@ int main()
 
     //run_gl_test_mod_inv(g_vec_inv);
     //run_gl_test_mod_ops(g_vec_ops);
-    run_gl_test_ecc_add(g_vec_add);
+    //run_gl_test_ecc_add(g_vec_add);
+    run_gl_test_ecc_scale(g_vec_scl);
+    //test_gl_hex_ecc_scale();
  
     //test_gl_bigint();
-    test_ecc_ops();
+    //test_ecc_ops();
     //test_gl_hex_num();
+    //test_gl_ecc_point_scale();
 
     //printf("using bigint:\n");
     //BigInt_test_euclidean<bigint>();

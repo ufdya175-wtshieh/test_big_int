@@ -110,14 +110,14 @@ bool parse_test_script(int script_type, const char* scriptFile, int query_start,
             p = strstr(s, "test vector");
             if (!p || sscanf_s(p, "test vector %d", &vector_id) != 1)
                 continue;
-            printf("parse line:%s\n", s);
-            printf(" reading vec %d..\n", vector_id);
+            //printf("parse line:%s\n", s);
+            //printf(" reading vec %d..\n", vector_id);
             parse_value = 1;
             i = 0;
         }
         else {
             if (!is_valid_hex_str(script_type, i, line)) {
-                printf(" vector %d (line:%d) invalid, skip\n", vector_id, ln);
+                //printf(" vector %d (line:%d) invalid, skip\n", vector_id, ln);
                 parse_value = 0;
                 goto next;
             }
@@ -133,7 +133,7 @@ bool parse_test_script(int script_type, const char* scriptFile, int query_start,
                 //    convert_hex_rev(line, &nums[i][0]);
                 //}
                 if (tn >= query_start) {
-                    printf(" [%d][%d]: %s\n", tn, i, line.c_str());
+                    //printf(" [%d][%d]: %s\n", tn, i, line.c_str());
                     test_vec[ti].push_back(string("0x") + line); // string is Hex format
                 }
                 i++;
@@ -232,7 +232,10 @@ ECC_POINT<T> ecc_point_add(ECC_PARAM<T>& ecc, T& px, T& py, T& qx, T& qy) {
     T big_rx, big_ry;
     T& big_P = *ecc.P;
 
-    // add, for P¡ÚQ
+    //if (px == qx && py == qy)
+    //    return ecc_point_double(ecc, px, py);
+    
+    // add, for P¡ÚQ case
     // £f = (qy-py) / (qx-px)
     // zx = £f*£f - px - qx
     // zy = £f*(px - zx) - py
@@ -252,10 +255,77 @@ ECC_POINT<T> ecc_point_add(ECC_PARAM<T>& ecc, T& px, T& py, T& qx, T& qy) {
     return { big_rx, big_ry };
 }
 
+template<typename T>
+ECC_POINT<T> ecc_point_double(ECC_PARAM<T>& ecc, T& px, T& py) {
+    T lam, t0, t1;
+    T big_rx, big_ry;
+    T& big_P = *ecc.P;
+    T& big_A = *ecc.A;
+
+    // add, for P=Q case
+    // £f = (3*px*px+a) / (2py)
+    // zx = £f*£f - px - px
+    // zy = £f*(px - zx) - py
+    t0 = mod_mult(px, px, big_P);
+    t1 = mod_add(t0, t0, big_P);
+    t1 = mod_add(t1, t0, big_P); //3x ^ 2
+    t1 = mod_add(t1, big_A, big_P);
+
+    t0 = mod_add(py, py, big_P);
+    t0 = mod_inv(t0, big_P);
+
+    lam = mod_mult(t0, t1, big_P);
+
+    t0 = mod_mult(lam, lam, big_P);
+    t0 = mod_sub(t0, px, big_P);
+    big_rx = mod_sub(t0, px, big_P);
+
+    t1 = mod_sub(px, big_rx, big_P);
+    t1 = mod_mult(t1, lam, big_P);
+    big_ry = mod_sub(t1, py, big_P);
+
+    return { big_rx, big_ry };
+}
+
+template<typename T>
+ECC_POINT<T> ecc_point_scale(ECC_PARAM<T>& ecc, T& px, T& py, T& k) {
+    ECC_POINT<T> tmp;
+    int idx{ 0 }, context{ 0 }, bit{ 0 };
+
+    // note: Identity 0 is invalid number
+    if (!glhint::c_next_bit(k, &context, NULL)) {
+        printf("init enum bit fail\n");
+        exit(1);
+        return tmp;
+    }
+
+    tmp.x = px;
+    tmp.y = py;
+
+    idx = 0;
+    glhint::c_next_bit(k, &context, &bit);
+    idx++;
+    // assert(bit == 1)
+
+    //count_reset();
+    // enum bit [1:_]
+    while (glhint::c_next_bit(k, &context, &bit)) {
+        idx++;
+        tmp = ecc_point_double(ecc, tmp.x, tmp.y);
+        if (bit) {
+            tmp = ecc_point_add(ecc, tmp.x, tmp.y, px, py);
+        }
+    }
+
+    return tmp;
+}
+
 // issue: fix unresolved external symbol, to instantiate template func in .obj
 template ECC_POINT<bigint> ecc_point_add(ECC_PARAM<bigint>& ecc, bigint& px, bigint& py, bigint& qx, bigint& qy);
 template ECC_POINT<glbigint> ecc_point_add(ECC_PARAM<glbigint>& ecc, glbigint& px, glbigint& py, glbigint& qx, glbigint& qy);
 template ECC_POINT<glhint> ecc_point_add(ECC_PARAM<glhint>& ecc, glhint& px, glhint& py, glhint& qx, glhint& qy);
+template ECC_POINT<glhint> ecc_point_double(ECC_PARAM<glhint>& ecc, glhint& px, glhint& py);
+template ECC_POINT<glhint> ecc_point_scale(ECC_PARAM<glhint>& ecc, glhint& px, glhint& py, glhint& k);
 
 /*
 bigint mod_sub(bigint& a, bigint& b, bigint& N) {
@@ -359,7 +429,10 @@ string normalize_hex_string(string& n) {
     int zeros = 0;
     while ((zeros + 2) < n.length() && n[zeros + 2] == '0')
         zeros++;
-    return "0x" + n.substr(zeros + 2);
+    if (zeros)
+        return "0x" + n.substr(zeros + 2);
+    else
+        return n;
 }
 string normalize_hex_string(string&& n) {
     string tmp = n;

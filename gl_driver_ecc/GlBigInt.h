@@ -721,10 +721,17 @@ namespace GLLIB {
     // ***** Big number, hex base implementation *****
     class glhint {
     public:
-        static constexpr auto MAX_SIZE = 0x1000LL;
+        //static constexpr auto MAX_SIZE = 0x1000LL;
+        //static constexpr auto CHUNK_SIZE = 3L;  // max_size's digits
+        static constexpr auto MAX_SIZE = 0x1000000LL;
+        static constexpr auto CHUNK_SIZE = 6L;  // max_size's digits
         //static constexpr auto MAX_SIZE = 100LL;
-        static constexpr auto CHUNK_SIZE = 3L;  // max_size's digits
 
+        // benchmark
+        static int s_count_add_sub;
+        static int s_count_mul;
+        static int s_count_div;
+        
         bool is_neg{ false };
         //int chnk_num;
         std::vector<long long> vec;
@@ -787,6 +794,7 @@ namespace GLLIB {
                 return *this;
 
             *this = add(*this, rhs);
+            s_count_add_sub++;
             return *this;
         }
 
@@ -797,6 +805,7 @@ namespace GLLIB {
                 return *this;
             }
             *this = subtract(*this, rhs);
+            s_count_add_sub++;
             return *this;
         }
         glhint operator-(const glhint& rhs) const {
@@ -807,6 +816,7 @@ namespace GLLIB {
 
         glhint operator*=(const glhint& rhs) {
             *this = multiply(*this, rhs);
+            s_count_mul++;
             return *this;
         }
 
@@ -910,9 +920,13 @@ namespace GLLIB {
         static bool c_compare_le(const glhint& lhs, const glhint& rhs) {
             return c_compare_ge(rhs, lhs);
         }
+        //static void c_from_msb_hex_bytes(); // 0x12AB..99 => [0x12, 0xAB, .., 0x99]
         static void c_from_msb_hex_chars(glhint& num, const BYTE* data, int len, bool is_negative);  // 0x12AB => data={1,2,A,B},len=2
         static void c_from_msb_dec_chars(glhint& num, const BYTE* data, int len, bool is_negative);  // 10245 => data={1,0,2,4,5},len=5
         static int  c_count_digits(const glhint&);
+        static int  c_get_total_bits(glhint& num);  // total bit count
+        static int  c_get_bit(glhint &num, int nth); // n-th bit, return 0 or 1; -1 if fail
+        static bool c_next_bit(glhint &num, int *context, int *bit);  // (&ctx, NULL): initial, (&ctx, &bit): get & move next, from lsb
 
         // convert
         explicit operator int() const {
@@ -1198,7 +1212,9 @@ namespace GLLIB {
             }
         }
         //std::cout << denominator << " (de)\n";
-
+        
+        s_count_div++;//test, delete
+        
         return { quotient, remainder };
     }
 
@@ -1342,6 +1358,85 @@ namespace GLLIB {
         if (num.vec.size() > 1)
             digi += ((int)num.vec.size() - 1) * CHUNK_SIZE;
         return digi;
+    }
+
+    inline int  glhint::c_get_total_bits(glhint& num) {
+        // total bit count, starting from MSBit
+        long long val = num.vec[0];
+        long long mb = MAX_SIZE;
+        int bits = CHUNK_SIZE * 4;
+        if (val == 0) {
+            // !! should be of size=1
+            //return ((int)num.vec.size() - 1) * CHUNK_SIZE * 4;
+            return 0;
+        }
+
+        mb >>= 1;
+        while (!(mb & val)) {
+            bits--;
+            mb >>= 1;
+        }
+        return bits + ((int)num.vec.size() - 1) * CHUNK_SIZE * 4;
+    }
+    inline int  glhint::c_get_bit(glhint &num, int nth) {
+        // n-th bit, return 0 or 1; -1 if fail
+        // nth = 0 = LSB bit
+        const int bits_per_chunk = CHUNK_SIZE * 4;
+        int idx = nth / bits_per_chunk;
+        int bit = nth % bits_per_chunk;
+        if (idx >= num.vec.size())
+            return -1;
+        idx = num.vec.size() - 1 - idx;
+        return (num.vec[idx] & (1 << bit)) ? 1 : 0;
+    }
+    inline bool glhint::c_next_bit(glhint &num, int* context, int* bit) {
+        // perform bit enum starting from MSBit, at vec[0][msb]
+        struct enum_context {
+            int idx : 16;
+            int bit : 8;
+            int msb : 8;  // MSB valid bits of first chunk
+        };
+
+        if (!context)
+            return false;
+
+        enum_context* pc = (enum_context*)context;
+        if (!bit) {
+            // perform reset
+            long long val = num.vec[0];
+            long long mb = MAX_SIZE;
+
+            if (val == 0) {
+                // special 0 case
+                *context = 0;
+                return false;
+            }
+            
+            pc->idx = 0;
+            pc->bit = 0;
+            pc->msb = (int)CHUNK_SIZE * 4 - 1;
+            mb >>= 1;
+            while (!(mb & val)) {
+                pc->msb--;
+                mb >>= 1;
+            }
+            pc->bit = pc->msb;
+            return true;
+        }
+
+        if (pc->idx >= num.vec.size() || (pc->idx == (num.vec.size()-1) && pc->bit < 0)) {
+            //printf("access over valid bits! idx=%d bit=%d\n", pc->idx, pc->msb);
+            return false;
+        }
+        
+        *bit = (num.vec[pc->idx] >> pc->bit) & 1;
+        pc->bit--;
+        if (pc->bit < 0) {
+            pc->idx++;
+            pc->bit = (int)CHUNK_SIZE * 4 - 1;
+        }
+
+        return true;
     }
 }
 

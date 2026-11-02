@@ -67,6 +67,12 @@ T mod_inv(T& a, T& N);
 template<typename T>
 ECC_POINT<T> ecc_point_add(ECC_PARAM<T>& ecc, T& px, T& py, T& qx, T& qy);
 
+template<typename T>
+ECC_POINT<T> ecc_point_double(ECC_PARAM<T>& ecc, T& px, T& py);
+
+template<typename T>
+ECC_POINT<T> ecc_point_scale(ECC_PARAM<T>& ecc, T& px, T& py, T& k);
+
 // for verify
 //bigint mod_sub(bigint& a, bigint& b, bigint& N);
 //bigint mod_add(bigint& a, bigint& b, bigint& N);
