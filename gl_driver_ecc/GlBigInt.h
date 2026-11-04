@@ -721,22 +721,32 @@ namespace GLLIB {
     // ***** Big number, hex base implementation *****
     class glhint {
     public:
-        //static constexpr auto MAX_SIZE = 0x1000LL;
-        //static constexpr auto CHUNK_SIZE = 3L;  // max_size's digits
+#if 0
+        static constexpr auto MAX_SIZE = 0x1000LL;
+        static constexpr auto CHUNK_SIZE = 3L;  // max_size's digits
+#else
         static constexpr auto MAX_SIZE = 0x1000000LL;
         static constexpr auto CHUNK_SIZE = 6L;  // max_size's digits
+#endif
         //static constexpr auto MAX_SIZE = 100LL;
 
         // benchmark
         static int s_count_add_sub;
         static int s_count_mul;
         static int s_count_div;
+        static int s_max_chunk;
         
         bool is_neg{ false };
         //int chnk_num;
         std::vector<long long> vec;
 
         // constructors
+        ~glhint() {
+            if (vec.size()) {
+                if (s_max_chunk < vec.size())
+                    s_max_chunk = vec.size();
+            }
+        }
         glhint() : vec({ 0 }) {}
         glhint(std::vector<long long> _vec) { // need to set sign later
             vec = std::move(_vec);
@@ -920,7 +930,7 @@ namespace GLLIB {
         static bool c_compare_le(const glhint& lhs, const glhint& rhs) {
             return c_compare_ge(rhs, lhs);
         }
-        //static void c_from_msb_hex_bytes(); // 0x12AB..99 => [0x12, 0xAB, .., 0x99]
+        static void c_from_msb_hex_bytes(glhint& num, const BYTE* data, int len, bool is_negative); // 0x12AB..99 => [0x12, 0xAB, .., 0x99]
         static void c_from_msb_hex_chars(glhint& num, const BYTE* data, int len, bool is_negative);  // 0x12AB => data={1,2,A,B},len=2
         static void c_from_msb_dec_chars(glhint& num, const BYTE* data, int len, bool is_negative);  // 10245 => data={1,0,2,4,5},len=5
         static int  c_count_digits(const glhint&);
@@ -1312,6 +1322,58 @@ namespace GLLIB {
         return ss.str();
     }
     // **** C-like Func implement ****
+    inline void glhint::c_from_msb_hex_bytes(glhint& num, const BYTE* data, int len, bool is_negative) {
+        // ex. for chunk_size=3,
+        // 0x01AB -> [1FC]; 1 chunk
+        // 0x1FAB -> [1],[FAB]; 2 chunks
+        int i, j, ci, chunk_num;
+        int all_nibs, chunk_nibs, nib, low;
+        long long val;
+
+        all_nibs = len * 2;
+        chunk_nibs = CHUNK_SIZE;
+        i = 0;
+        j = 0;
+        low = 0;
+        if ((data[0] & 0xF0) == 0) { //skip 1st 0 nibble
+            all_nibs -= 1;
+            low = 1;
+        }
+        
+        // locate 1st chunk's nibble pos
+        // ex. '0x56AB', 4 nibbles, CSIZE=3, '5' is the 2-th nibble in a chunk
+        j = all_nibs % CHUNK_SIZE;
+        if (j) {
+            j = CHUNK_SIZE - j;
+        }
+       
+        val = 0;
+        ci = 0;
+        chunk_num = (all_nibs + CHUNK_SIZE - 1) / CHUNK_SIZE;
+        num.vec.resize(chunk_num);
+        while (i < len) {
+            
+            while (j < chunk_nibs) {
+                if (low == 0) {
+                    nib = (data[i] & 0xF0) >> 4;
+                    //printf("nib=%X low=%d i=%d j=%d\n", nib, low, i, j);
+                    low = 1;
+                }
+                else {
+                    nib = data[i] & 0x0F;
+                    //printf("nib=%X low=%d i=%d j=%d\n", nib, low, i, j);
+                    low = 0;
+                    i++;
+                }
+                
+                j++;
+                val = val * 16 + (long long)nib;
+            }
+            num.vec[ci++] = val;
+            j = 0;
+            val = 0;
+        }
+    }
     inline void glhint::c_from_msb_hex_chars(glhint& num, const BYTE* data, int len, bool is_negative) {
         // each BYTE[] = a single 4-bit (0~F) number
         // refer to original 'string to vector'

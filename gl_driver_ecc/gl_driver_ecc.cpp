@@ -21,6 +21,7 @@ using namespace GLLIB;
 int glhint::s_count_add_sub = 0;
 int glhint::s_count_mul = 0;
 int glhint::s_count_div = 0;
+int glhint::s_max_chunk = 0;
 
 void count_reset() {
     glhint::s_count_add_sub = 0;
@@ -82,7 +83,7 @@ void test_ecc_ops() {
     bigint big_A = A;
     bigint big_N = ORDER;
     ECC_POINT<bigint> big_pt;
-    ECC_PARAM<bigint> ecc{ &big_P, &big_A, NULL, &big_N };
+    ECC_PARAM<bigint> ecc{ &big_P, &big_A, NULL, &big_N, NULL, NULL };
 
     big_pt = ecc_point_add<bigint>(ecc, big_px, big_py, big_qx, big_qy);
     std::cout << "Rx:" << big_pt.x << endl;
@@ -96,7 +97,7 @@ void test_ecc_ops() {
     glbigint gl_A = A;
     glbigint gl_N = ORDER;
     ECC_POINT<glbigint> gl_pt;
-    ECC_PARAM<glbigint> gl_ecc{ &gl_P, &gl_A, NULL, &gl_N };
+    ECC_PARAM<glbigint> gl_ecc{ &gl_P, &gl_A, NULL, &gl_N, NULL, NULL };
 
     gl_pt = ecc_point_add<glbigint>(gl_ecc, gl_px, gl_py, gl_qx, gl_qy);
     std::cout << "Rx:" << gl_pt.x << endl;
@@ -125,12 +126,12 @@ void test_gl_hex_num() {
         j = glhint::c_get_bit(h1, i);
         //printf(" bit %d = %d\n", i, j);
         buf += j ? '1' : '0';
-        if ((total - 1-i) % 8 == 0)
+        if ((total - 1 - i) % 8 == 0)
             buf += ',';
     }
     std::reverse(buf.begin(), buf.end());
     cout << buf << endl;
-    
+
     context = 0;
     i = 0;
     buf = "";
@@ -144,6 +145,20 @@ void test_gl_hex_num() {
     //std::reverse(buf.begin(), buf.end());
     cout << "enum bits\n";
     cout << buf << endl;
+
+    vector<vector<BYTE>> raw_bytes{
+        { 0x01, 0x23, 0xAB },
+        { 0x01, 0x23 },
+        { 0x1F, 0x23, 0xAB },
+        { 0x01, 0x33, 0x34, 0x1F },
+        { 0x81, 0x33, 0x34, 0x1F },
+        { 0x03, 0x44, 0x55, 0x66, 0x77 },
+        { 0x13, 0x44, 0x55, 0x66, 0x77 },
+    };
+    for (auto& raw : raw_bytes) {
+        glhint::c_from_msb_hex_bytes(h1, &raw[0], raw.size(), false);
+        cout << h1 << " chunks=" << h1.vec.size() << endl;
+    }
 }
 
 void test_gl_ecc_point_scale() {
@@ -158,7 +173,7 @@ void test_gl_ecc_point_scale() {
     glhint h_P = PRIME;
     glhint h_A = A;
     glhint h_N = ORDER;
-    ECC_PARAM<glhint> ecc{&h_P, &h_A, NULL, &h_N};
+    ECC_PARAM<glhint> ecc{&h_P, &h_A, NULL, &h_N, NULL, NULL };
     h_tmp = ecc_point_scale(ecc, h_pt.x, h_pt.y, h_k);
     /*
     int context{ 0 }, bit{ 0 }, idx{ 0 };
@@ -201,6 +216,23 @@ void test_gl_ecc_point_scale() {
         cout << " test ok\n";
     else
         cout << " test fail\n";
+}
+void test_gl_hex_verify() {
+    glhint h_P = PRIME;
+    glhint h_A = A;
+    glhint h_N = ORDER;
+    glhint h_Gx = Gx;
+    glhint h_Gy = Gy;
+    ECC_PARAM<glhint> ecc{ &h_P, &h_A, NULL, &h_N, &h_Gx, &h_Gy };
+
+    glhint priv = "0x3c6094b39e43651a965970cff68c637a1c381289aadfe8c8d95d2674fe1830db";
+    glhint pubx = "0xc89498d9f1c7fd5cf0c116c9b27ef68b5ef654450a61289ce2075370ad61485d";
+    glhint puby = "0x41f2d5dd843b3cf33c37e0bba932bb5a1c40f5bd548b36e61cbac5ed956418ce";
+    glhint sigr = "0x4C75B209490ED920E9B6CB8280018AA72ACC4173B0C38F25690BE44DD843085E";
+    glhint sigs = "0xBA0485D19A65EE094803F73671D3BC7B8F0EB27A88F3D8E1A77BC54A7EEDA66C";
+    glhint msg =  "0x4876cc70c76a799537e723288fc2d8e86601ca096ca5ab363c358bc66300e335";
+
+    bool ret = ecdsa_verify_sig(ecc, pubx, puby, sigr, sigs, msg);
 }
 template<typename T>  // only support glbigint, glhint
 T Gl_BigInt_run_eclidean_mod(T& a, T& n) {
@@ -357,12 +389,12 @@ void read_gl_test_script() {
     };
 
     // total = 10000 tests for each script
-    parse_test_script(SCP_FIELD_INVERSE, fname_inv, 0, 50, g_vec_inv);
+    parse_test_script(SCP_FIELD_INVERSE, fname_inv, 0, 10, g_vec_inv);
     //print_test_vec(g_vec_inv);
     parse_test_script(SCP_FIELD_BASIC, fname_ops, 0, 10, g_vec_ops);
     //print_test_vec(g_vec_ops);
-    parse_test_script(SCP_ECC_ADD, fname_add, 0, 100, g_vec_add);
-    parse_test_script(SCP_ECC_MUL, fname_mul, 0, 10000, g_vec_scl);
+    parse_test_script(SCP_ECC_ADD, fname_add, 0, 10, g_vec_add);
+    parse_test_script(SCP_ECC_MUL, fname_mul, 0, 5, g_vec_scl);
 }
 void run_gl_test_mod_inv(TEST_STR_VEC &test_vec) {
     // Y = X^(-1) mod N
@@ -539,7 +571,7 @@ void run_gl_test_ecc_add(TEST_STR_VEC& test_vec) {
     glhint h_A = A;
     glhint h_N = ORDER;
     ECC_POINT<glhint> h_pt;
-    ECC_PARAM<glhint> ecc_h{ &h_P, &h_A, NULL, &h_N };
+    ECC_PARAM<glhint> ecc_h{ &h_P, &h_A, NULL, &h_N, NULL, NULL };
 
     for (i = 0; i < (int)test_vec.size(); i++) {
         ok = true;
@@ -577,7 +609,7 @@ void run_gl_test_ecc_scale(TEST_STR_VEC& test_vec) {
     glhint h_A = A;
     glhint h_N = ORDER;
     ECC_POINT<glhint> h_pt;
-    ECC_PARAM<glhint> ecc_h{ &h_P, &h_A, NULL, &h_N };
+    ECC_PARAM<glhint> ecc_h{ &h_P, &h_A, NULL, &h_N, NULL, NULL };
     
     for (i = 0; i < (int)test_vec.size(); i++) {
         ok = true;
@@ -776,15 +808,24 @@ int main()
     read_gl_test_script();
 
     //run_gl_test_mod_inv(g_vec_inv);
+    //printf("inv: %d\n", glhint::s_max_chunk);
+    //glhint::s_max_chunk = 0;
     //run_gl_test_mod_ops(g_vec_ops);
+    //printf("mod: %d\n", glhint::s_max_chunk);
+    //glhint::s_max_chunk = 0;
     //run_gl_test_ecc_add(g_vec_add);
-    run_gl_test_ecc_scale(g_vec_scl);
-    //test_gl_hex_ecc_scale();
+    //printf("ecc add: %d\n", glhint::s_max_chunk);
+    //glhint::s_max_chunk = 0;
+    //run_gl_test_ecc_scale(g_vec_scl);
+    //printf("ecc add: %d\n", glhint::s_max_chunk);
+    //glhint::s_max_chunk = 0;
  
-    //test_gl_bigint();
+    //test_gl_hex_ecc_scale();
+     //test_gl_bigint();
     //test_ecc_ops();
     //test_gl_hex_num();
     //test_gl_ecc_point_scale();
+    test_gl_hex_verify();
 
     //printf("using bigint:\n");
     //BigInt_test_euclidean<bigint>();

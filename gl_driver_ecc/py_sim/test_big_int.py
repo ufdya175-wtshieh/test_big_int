@@ -108,6 +108,28 @@ def ecc_point_double(ecc, px, py):
     
     return Rx, Ry
     
+def ecc_point_scale(ecc, px, py, k):
+    
+    tx, ty = px, py
+    
+    # ex. 0b1111111001
+    kAsBinary = bin(k) 
+    
+    # 1111111001
+    kAsBinary = kAsBinary[2:len(kAsBinary)] 
+    # print(kAsBinary)
+    
+    for i in range(1, len(kAsBinary)):
+        currentBit = kAsBinary[i: i+1]
+        
+        # always apply doubling
+        tx, ty = ecc_point_double(ecc, tx, ty)
+        
+        if currentBit == '1':
+            # add base point
+            tx, ty = ecc_point_add(ecc, tx, ty, px, py)
+    
+    return tx, ty
 
 def run_euclidean(a, n, p):
     # find x, y, s.t. a*x+n*y = 1
@@ -217,6 +239,68 @@ def run_ecc_add_test():
     for item in test_pts:
         _x, _y = ecc_point_add(ecc, item[0][0], item[0][1], item[1][0], item[1][1])
         print(f'add: {_x},{_y}, ans={item[2][0]},{item[2][1]}')
+
+def ecc_verify(sigr, sigs, msg):
+    """Verify ECDSA signature"""
+    priv = 0x3c6094b39e43651a965970cff68c637a1c381289aadfe8c8d95d2674fe1830db
+    pubx = 0xc89498d9f1c7fd5cf0c116c9b27ef68b5ef654450a61289ce2075370ad61485d
+    puby = 0x41f2d5dd843b3cf33c37e0bba932bb5a1c40f5bd548b36e61cbac5ed956418ce
+
+    #w = s^-1
+    #u1 = w*h(x)
+    #u2 = w*r
+    #P = u1*G + u2*B .. point scaling
+    #P.x == r ?
+    w = mod_inv(sigs, ECC_N)
+    t1 = mod_mult(w, sigs, ECC_N)
+    print(" verify", t1)
+    u1 = mod_mult(w, msg, ECC_N)
+    u2 = mod_mult(w, sigr, ECC_N)
+    t1x, t1y = ecc_point_scale(ECC_P256, ECC_Gx, ECC_Gy, u1)
+    t2x, t2y = ecc_point_scale(ECC_P256, pubx, puby, u2)
+    Px, Py = ecc_point_add(ECC_P256, t1x, t1y, t2x, t2y)
+    print("px:", Px)
+    print("_r:", sigr)
+    if Px == sigr:
+        print("signature verify OK")
+    else:
+        print("signature verify FAIL!")
+
+def run_ecc_verify_test():
+    #sigr = 0x4C75B209490ED920E9B6CB8280018AA72ACC4173B0C38F25690BE44DD843085E
+    #sigs = 0xBA0485D19A65EE094803F73671D3BC7B8F0EB27A88F3D8E1A77BC54A7EEDA66C
+    sigr = 0xba56140bdd55e71e04dafe613bca9662508d013b1df0449b47f0a61f19023e89
+    sigs = 0x4881abeea7ce7c7942b4a50ac4484882b005829cac0df63478139a10ad87a8e9
+    msg  = 0x4876cc70c76a799537e723288fc2d8e86601ca096ca5ab363c358bc66300e335  #h(x)
+
+    ecc_verify(sigr, sigs, msg)
+
+    # test point scaling
+    '''px = 0xea75368e527e7b41b72e998f4baafe89f9abfb6002350c5544e0ea8752a16704
+    py = 0x7d6ed056f81a7b6e9c6e8772881cba17dc86475f4ce547b4abe2f6254fe6bcff
+    k = 0xbdfd501ac014cf8e7fe74a7cbf2c5e555a2c7d53c708f7199a687a3a6f7a0841
+    rx = 0x7931144ff9c7d8a1cc190a7cabc35110f04acb803ae3540b239e2d165ab8f8f5
+    ry = 0x24d6312db9c53be57cee80c0f268a738310be9f3ba3fb505169a08b21ec91c37
+    tx, ty = ecc_point_scale(ECC_P256, px, py, k)
+    print("tx:", hex(tx))
+    print("ty:", hex(ty))
+    print("test ok" if rx==tx and ry==ty else "test fail")'''
+
+def run_ecc_sign_test():
+    priv = 0x3c6094b39e43651a965970cff68c637a1c381289aadfe8c8d95d2674fe1830db
+    msg  = 0x4876cc70c76a799537e723288fc2d8e86601ca096ca5ab363c358bc66300e335
+    ke   = 0x5010101010101010101010101010101010101010101010101010101010101010
+
+    # r = x of R=kG, k:rand
+    # s = (msg + d*r) / rand
+    rx, ry = ecc_point_scale(ECC_P256, ECC_Gx, ECC_Gy, ke)
+    ki = mod_inv(ke, ECC_N)
+    s = mod_mult(priv, rx, ECC_N)
+    s = mod_add(s, msg, ECC_N)
+    s = mod_mult(s, ki, ECC_N)
+
+    return rx, s
+    ...
     
 def main():
     """main entry"""
@@ -239,8 +323,11 @@ def main():
         _y = f'{y:8d}'# if y > 0 else f'({y:6d})'
         print(f'{ti[0]:6d}*{_x} + {ti[1]:6d}*{_y} ≡ {ans:3d} mod({ti[1]:4d})')
     # test some int inverse
-    run_ecc_add_test()
+    #run_ecc_add_test()
+    run_ecc_verify_test()
+    _r, _s = run_ecc_sign_test()
+    print("sign r:", hex(_r))
+    print("sign s:", hex(_s))
     
-
 if __name__ == '__main__':
     main()

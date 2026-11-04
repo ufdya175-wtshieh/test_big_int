@@ -31,7 +31,8 @@ struct ECC_PARAM {
     T* A;
     T* B;
     T* N;
-    // Gx, Gy...
+    T* Gx;
+    T* Gy;
 };
 
 template <typename T>
@@ -72,6 +73,9 @@ ECC_POINT<T> ecc_point_double(ECC_PARAM<T>& ecc, T& px, T& py);
 
 template<typename T>
 ECC_POINT<T> ecc_point_scale(ECC_PARAM<T>& ecc, T& px, T& py, T& k);
+
+template<typename T>
+bool ecdsa_verify_sig(ECC_PARAM<T>& ecc, T& pubx, T& puby, T& r, T& s, T& msg);
 
 // for verify
 //bigint mod_sub(bigint& a, bigint& b, bigint& N);

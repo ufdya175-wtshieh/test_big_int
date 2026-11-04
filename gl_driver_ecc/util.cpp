@@ -320,12 +320,31 @@ ECC_POINT<T> ecc_point_scale(ECC_PARAM<T>& ecc, T& px, T& py, T& k) {
     return tmp;
 }
 
+template<typename T>
+bool ecdsa_verify_sig(ECC_PARAM<T>& ecc, T& pubx, T& puby, T& r, T& s, T& msg) {
+    ECC_POINT<T> t1, t2, P;
+    T w, u1, u2;
+    w = mod_inv(s, *ecc.N);
+    u1 = mod_mult(w, msg, *ecc.N);
+    u2 = mod_mult(w, r, *ecc.N);
+    t1 = ecc_point_scale(ecc, *ecc.Gx, *ecc.Gy, u1);
+    t2 = ecc_point_scale(ecc, pubx, puby, u2);
+    P = ecc_point_add(ecc, t1.x, t1.y, t2.x, t2.y);
+    cout << "Px:" << P.x << endl;
+    cout << " r:" << r << endl;
+
+    bool ok = P.x == r;
+    cout << (ok ? " verify OK" : " verify FAIL") << endl;
+    return ok;
+}
+
 // issue: fix unresolved external symbol, to instantiate template func in .obj
 template ECC_POINT<bigint> ecc_point_add(ECC_PARAM<bigint>& ecc, bigint& px, bigint& py, bigint& qx, bigint& qy);
 template ECC_POINT<glbigint> ecc_point_add(ECC_PARAM<glbigint>& ecc, glbigint& px, glbigint& py, glbigint& qx, glbigint& qy);
 template ECC_POINT<glhint> ecc_point_add(ECC_PARAM<glhint>& ecc, glhint& px, glhint& py, glhint& qx, glhint& qy);
 template ECC_POINT<glhint> ecc_point_double(ECC_PARAM<glhint>& ecc, glhint& px, glhint& py);
 template ECC_POINT<glhint> ecc_point_scale(ECC_PARAM<glhint>& ecc, glhint& px, glhint& py, glhint& k);
+template bool ecdsa_verify_sig(ECC_PARAM<glhint>& ecc, glhint& pubx, glhint& puby, glhint& r, glhint& s, glhint& msg);
 
 /*
 bigint mod_sub(bigint& a, bigint& b, bigint& N) {
