@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <array>
+#include <chrono>
 #include "bigint.h"
 #include "GlBigInt.h"
 #include "util.h"
@@ -234,6 +235,77 @@ void test_gl_hex_verify() {
 
     bool ret = ecdsa_verify_sig(ecc, pubx, puby, sigr, sigs, msg);
 }
+void test_gl_hex_sign() {
+    glhint h_P = PRIME;
+    glhint h_A = A;
+    glhint h_N = ORDER;
+    glhint h_Gx = Gx;
+    glhint h_Gy = Gy;
+    ECC_PARAM<glhint> ecc{ &h_P, &h_A, NULL, &h_N, &h_Gx, &h_Gy };
+    chrono::time_point<std::chrono::steady_clock> time0, time1;
+    chrono::duration<double, std::milli> time_diff;
+
+    glhint priv = "0x3c6094b39e43651a965970cff68c637a1c381289aadfe8c8d95d2674fe1830db";
+    glhint pubx = "0xc89498d9f1c7fd5cf0c116c9b27ef68b5ef654450a61289ce2075370ad61485d";
+    glhint puby = "0x41f2d5dd843b3cf33c37e0bba932bb5a1c40f5bd548b36e61cbac5ed956418ce";
+    //glhint sigr = "0x4C75B209490ED920E9B6CB8280018AA72ACC4173B0C38F25690BE44DD843085E";
+    //glhint sigs = "0xBA0485D19A65EE094803F73671D3BC7B8F0EB27A88F3D8E1A77BC54A7EEDA66C";
+    glhint sigr, sigs;
+    glhint msg = "0x4876cc70c76a799537e723288fc2d8e86601ca096ca5ab363c358bc66300e335";
+
+    cout << "perform signing...\n";
+    time0 = chrono::steady_clock::now();
+    ecdsa_sign(ecc, priv, msg, sigr, sigs);
+    time1 = chrono::steady_clock::now();
+    time_diff = time1 - time0;
+    cout << "sigr:" << sigr << endl;
+    cout << "sigs:" << sigs << endl;
+    cout << "sign time: " << time_diff.count() << endl;
+
+    cout << "perform verifying...\n";
+    time0 = chrono::steady_clock::now();
+    ecdsa_verify_sig(ecc, pubx, puby, sigr, sigs, msg);
+    time1 = chrono::steady_clock::now();
+    time_diff = time1 - time0;
+    cout << "verify time: " << time_diff.count() << endl;
+}
+void test_sha256() {
+    BYTE data[] = {
+        0x31,0x32,0x33,0x34,0x0D,0x0A,0x74,0x68,
+        0x65,0x20,0x6D,0x65,0x73,0x73,0x61,0x67,
+        0x65,0x20,0x74,0x6F,0x20,0x73,0x69,0x67,
+        0x6E,0x78,0x0D,0x0A
+    };
+    int chunk = 4, data_len = sizeof(data);
+    char hex[SHA256_HEX_SIZE]{ 0 };
+    BYTE out[SHA256_BYTES_SIZE]{ 0 };
+
+    /* Compute SHA-256 sum. */
+    const int method = 3;
+    {
+        sha256_hex(data, sizeof(data), hex);
+        printf("m1 res=%s\n", hex);
+    }
+    {
+        sha256 ctx;
+        sha256_init(&ctx);
+        for (int i = 0; i < data_len; i += 4) {
+            sha256_append(&ctx, data + i, 4);
+        }
+        sha256_finalize_hex(&ctx, hex);
+        printf("m2 res=%s\n", hex);
+    }
+    {
+        sha256_bytes(data, sizeof(data), out);
+
+        printf("m3 res=");
+        for (int i = 0; i < SHA256_BYTES_SIZE; i++) {
+            printf("%02X", out[i]);
+        }
+        printf("\n");
+    }
+}
+
 template<typename T>  // only support glbigint, glhint
 T Gl_BigInt_run_eclidean_mod(T& a, T& n) {
     T sx = 1;
@@ -825,13 +897,17 @@ int main()
     //test_ecc_ops();
     //test_gl_hex_num();
     //test_gl_ecc_point_scale();
-    test_gl_hex_verify();
+    //test_gl_hex_verify();
+    //test_gl_hex_sign();
+    test_sha256();
 
     //printf("using bigint:\n");
     //BigInt_test_euclidean<bigint>();
 
     //printf("using GL Int:\n");
     //BigInt_test_euclidean<glhint>();
+
+    
 
     // ********* debugging session ********
     //debug_gl_int();
